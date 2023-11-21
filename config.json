@@ -1,0 +1,11 @@
+{
+    "minio-enpoint" : "192.168.178.250:9000",
+    "minio-access_key" : "minioadmin",
+    "minio-secret_key" : "minioadmin" ,
+    "input-bath-size" :  500,
+    "bucket-prefix" : "open-wh",
+    "mapFunction" : "customer-mapper",
+    "mapFunction-main": "joke",
+    "reduceFunction" : "customer-reducer",
+    "reduceFunction-main" : "handle"
+}
