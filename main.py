@@ -45,15 +45,16 @@ def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainF
             "kind": runtime,
             "code": code_content,
             "main": mainFunction
-        },
-        "annotations": [
+        },       
+           "annotations": [
             {
                "key": "limits.maxInvocations",
-                "value": 100
+                "value": 100000
             }
         ],
         "limits": {
-            "concurrency": 1
+            "concurrency": 5,
+            "timeout" : 120000
         }
     }
 
@@ -62,9 +63,14 @@ def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainF
     # Check the response
     if response.status_code == 200:
         print(f"Function {functionName} deployed successfully!")
+    elif response.status_code ==409:
+        print("Abort function didnt deployed")
+        raise Exception("Cant do shit", response.text)
     else:
         print(f"Failed to deploy function. Status code: {response.status_code}")
         print("Error message:", response.text)
+    print("Now sleeping for openwhisk")
+    time.sleep(20)
 
 
 def invoke_a_function(auth_key, url, body ):
@@ -81,11 +87,12 @@ def invoke_a_function(auth_key, url, body ):
     if response.status_code == 200:
         print(response.content)
     else:
-        print(f"Failed to deploy function. Status code: {response.status_code}")
+        print(f"Failed to run function. Status code: {response.status_code}")
         print("Error message:", response.text)
 
 input_bucket = parsed_config['bucket-prefix'] + "-input"
 
+print("making Input bucket")
 client.make_bucket(bucket_name=input_bucket)
 
 usedkeys = []
@@ -131,7 +138,6 @@ for key in usedkeys:
         "key": str(key),
         "outputBucket": intermidated_buket
     }
-    #invoke_a_function(auth_key=auth_key, url=url, body=body)
     thread = threading.Thread(target=invoke_a_function, args=(auth_key, url, data,))
     threads.append(thread)
 
@@ -143,7 +149,7 @@ for thread in threads:
 for thread in threads:
     thread.join()
 
-print("All HTTP calls completed.")   
+print("All Mapper calls completed.")   
  
 threads.clear()
 
@@ -155,11 +161,12 @@ reducer_function_name = parsed_config['bucket-prefix'] + "-reducer"
 
 url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{parsed_config['reduceFunction']}?overwrite=false"
 
-
+print("Deploying Reducer function")
 deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path="redOp/reducertest.zip", url=url, functionName=parsed_config['reduceFunction'] , mainFunction=parsed_config['reduceFunction-main'])
 
 output_bucket = parsed_config['bucket-prefix'] + "-output"
 
+print("Create Output Bucket")
 client.make_bucket(bucket_name=output_bucket)
 
 url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{parsed_config['reduceFunction']}?blocking=true&result=true"
@@ -169,23 +176,24 @@ print("getting all intermediate keys")
 for object in paths:
     intermediatekeys.append(object.object_name.split("/")[1])
 
+print("Now starting the Reduce Stage")
 for idx, key_1 in enumerate(intermediatekeys):
     data = {
         "bucketName": intermidated_buket,
         "key": str(key_1),
         "outputBucket": output_bucket
     }
-    if idx > 0 and idx % 10 == 0:
+    if idx > 0 and idx % 50 == 0:
+        print(f"starting calls for idx {idx}")
         for thread in threads:
             thread.start()
 
     # Wait for all threads to finish
         for thread in threads:
             thread.join()
-        time.sleep(65)
         threads.clear()
     
     thread = threading.Thread(target=invoke_a_function, args=(auth_key,url, data,))
     threads.append(thread)
 
-print("All HTTP calls completed. reduce")
+print("All Done reduce")
