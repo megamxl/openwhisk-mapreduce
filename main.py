@@ -247,7 +247,7 @@ for idx, key_1 in enumerate(intermediatekeys):
         "key": str(key_1),
         "outputBucket": output_bucket
     }
-    if idx > 0 and idx % 10 == 0:
+    if idx > 0 and idx % 50 == 0:
         print(f"starting calls for idx {idx}")
         for thread in threads:
             thread.start()
