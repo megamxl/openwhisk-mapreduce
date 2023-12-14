@@ -37,10 +37,5 @@ def handle(params):
     end_time = time.time()
     return {
         "key" : my_key,
-        "start_time" : start_time,
-        "end_time" : end_time
+        "time" : end_time - start_time
     }
-
-
-def emitValues(outputDict, client):
-   return True

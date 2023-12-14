@@ -16,9 +16,6 @@ def joke(params):
     my_name = params["bucketName"]
     my_key = params["key"]
     outputbucket = params["outputBucket"]
-    #my_name = "test-bucket"
-    #my_key = "2"
-    #outputbucket = "test-bucket-output"
     customers = {}
     start_time = time.time()
 
@@ -45,6 +42,5 @@ def joke(params):
     end_time = time.time()
     return {
         "key" : str(my_key),
-        "starttime" : str(start_time),
-        "end_time": str(end_time)
+        "time": str(end_time - start_time)
     }
