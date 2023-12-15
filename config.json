@@ -3,10 +3,10 @@
     "minio-access_key" : "minioadmin",
     "minio-secret_key" : "minioadmin" ,
     "input-bath-size" :  500,
-    "bucket-prefix" : "newres",
-    "mapFunction" : "customer-mapper",
+    "bucket-prefix" : "test4",
+    "mapFunction" : "mapper",
     "mapFunction-main": "joke",
-    "reduceFunction" : "customer-reducer",
+    "reduceFunction" : "reducer",
     "reduceFunction-main" : "handle",
     "debug" : true
 }

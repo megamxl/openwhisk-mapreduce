@@ -3,7 +3,6 @@ import base64
 from minio import Minio
 import io
 import json
-import http.client
 import time
 import threading
 import urllib3
@@ -54,7 +53,7 @@ def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainF
         ],
         "limits": {
             "concurrency": 5,
-            "timeout" : 150000
+            "timeout" : 250000
         }
     }
 
@@ -70,7 +69,7 @@ def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainF
         print(f"Failed to deploy function. Status code: {response.status_code}")
         print("Error message:", response.text)
     print("Now sleeping for openwhisk")
-    time.sleep(20)
+    time.sleep(60*5)
 
 
 def invoke_a_function(auth_key, url, body ):
@@ -88,6 +87,8 @@ def invoke_a_function(auth_key, url, body ):
         print("Error message:", response.text)
     elif response.status_code == 202:  
         activation_ids.append(json.loads(response.text)['activationId'])
+        if parsed_config['debug']: 
+            print(f"$ recieved one activatioin id{response.text}")
     else:
         if parsed_config['debug']: 
             print(response.text)
@@ -108,12 +109,70 @@ def reDoingRequests(req):
         thread = threading.Thread(target=invoke_a_function, args=(key_1[0], key_1[1], key_1[2]))
         localtread.append(thread)
 
+
 #TODO Activation id handler 
 def handle_activationID(req):
     for act_id in req:
         continue
 
+def HandleRequests(auth_key, invoke_a_function, reDoingRequests, handle_activationID, input_bucket, usedkeys, failed_req, activation_ids, url, output_buket, batchNumber):
+    threads = []
 
+    inv_time = time.time()
+    inv_counter = 0
+    print(f"Doing {len(usedkeys)} mapper calls ")
+    for idx, key_1 in enumerate(usedkeys):
+        data ={
+        "bucketName": input_bucket,
+        "key": str(key_1),
+        "outputBucket": output_buket
+    }
+        if idx > 0 and idx % batchNumber == 0:
+            inv_counter = inv_counter + 50
+            if(inv_counter > 3600):
+                if(time.time() - inv_time < 61):
+                    print(f"now sleeping {time.time() - inv_time} seconds")
+                    time.sleep(time.time() - inv_time)
+                    inv_time = time.time()
+                    inv_counter = 0
+                else:
+                    inv_counter= 0
+                    inv_time = time.time()
+
+            for thread in threads:
+                thread.start()
+
+            for thread in threads:
+                thread.join()
+        
+            threads.clear()
+            print("")
+    
+        thread = threading.Thread(target=invoke_a_function, args=(auth_key, url, data,))
+        threads.append(thread)
+
+    for thread in threads:
+                thread.start()
+
+# Wait for all threads to finish
+    for thread in threads:
+        thread.join()
+
+    threads.clear()
+
+    print(f"there were {len(failed_req)} failed request doing them again")
+
+    if len(failed_req) != 0:
+        reDoingRequests(failed_req)
+    
+    failed_req.clear()
+
+    print(f"there were {len(activation_ids)} request which arent returnt properly")
+
+    if len(activation_ids) != 0:
+        handle_activationID(failed_req)
+    
+    failed_req.clear()
 
 ###
 # 
@@ -158,7 +217,7 @@ url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{functionName}?o
 
 star_time = time.time()
 
-deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path=zip_file_path, url=url, functionName=functionName , mainFunction=parsed_config['mapFunction-main'])
+#deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path=zip_file_path, url=url, functionName=functionName , mainFunction=parsed_config['mapFunction-main'])
 print(f"depolyed mapper {functionName}")
 
 intermidated_buket = parsed_config['bucket-prefix'] + "-intermidated"
@@ -167,52 +226,7 @@ client.make_bucket(bucket_name=intermidated_buket)
 
 url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{functionName}?blocking=true&result=true"
 
-threads = []
-
-print(f"Doing {len(usedkeys)} mapper calls ")
-for idx, key_1 in enumerate(usedkeys):
-    data ={
-        "bucketName": input_bucket,
-        "key": str(key_1),
-        "outputBucket": intermidated_buket
-    }
-    if idx > 0 and idx % 50 == 0:
-        for thread in threads:
-            thread.start()
-
-    # Wait for all threads to finish
-        for thread in threads:
-            thread.join()
-        
-        threads.clear()
-        print("")
-    
-    thread = threading.Thread(target=invoke_a_function, args=(auth_key, url, data,))
-    threads.append(thread)
-
-for thread in threads:
-            thread.start()
-
-# Wait for all threads to finish
-for thread in threads:
-    thread.join()
-
-threads.clear()
-
-print(f"there were {len(failed_req)} failed request doing them again")
-
-if len(failed_req) != 0:
-    reDoingRequests(failed_req)
-    
-failed_req.clear()
-
-print(f"there were {len(activation_ids)} request which arent returnt properly")
-
-if len(activation_ids) != 0:
-    handle_activationID(failed_req)
-    
-failed_req.clear()
-
+HandleRequests(auth_key, invoke_a_function, reDoingRequests, handle_activationID, input_bucket, usedkeys, failed_req, activation_ids, url, intermidated_buket, 10)
 
 print("All Mapper calls completed.")   
  
@@ -225,7 +239,7 @@ reducer_function_name = parsed_config['bucket-prefix'] + "-reducer"
 url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{parsed_config['reduceFunction']}?overwrite=false"
 
 print("Deploying Reducer function")
-deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path="redOp/reducertest.zip", url=url, functionName=parsed_config['reduceFunction'] , mainFunction=parsed_config['reduceFunction-main'])
+#deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path="redOp/reducertest.zip", url=url, functionName=parsed_config['reduceFunction'] , mainFunction=parsed_config['reduceFunction-main'])
 
 output_bucket = parsed_config['bucket-prefix'] + "-output"
 
@@ -239,33 +253,7 @@ print("getting all intermediate keys")
 for object in paths:
     intermediatekeys.append(object.object_name.split("/")[1])
 
-print("Now starting the Reduce Stage")
-print(f"Doing {len(intermediatekeys)} reducer calls ")
-for idx, key_1 in enumerate(intermediatekeys):
-    data = {
-        "bucketName": intermidated_buket,
-        "key": str(key_1),
-        "outputBucket": output_bucket
-    }
-    if idx > 0 and idx % 50 == 0:
-        print(f"starting calls for idx {idx}")
-        for thread in threads:
-            thread.start()
-
-    # Wait for all threads to finish
-        for thread in threads:
-            thread.join()
-        threads.clear()
-    
-    thread = threading.Thread(target=invoke_a_function, args=(auth_key,url, data,))
-    threads.append(thread)
-
-print(f"there were {len(failed_req)} failed request doing them again")
-
-if len(failed_req) != 0:
-    reDoingRequests(failed_req)
-    
-failed_req.clear()
+HandleRequests(auth_key, invoke_a_function, reDoingRequests, handle_activationID, intermidated_buket, intermediatekeys,failed_req, activation_ids, url,output_bucket, 20)
 
 end_time = time.time()
 
