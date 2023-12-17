@@ -8,5 +8,6 @@
     "mapFunction-main": "joke",
     "reduceFunction" : "reducer",
     "reduceFunction-main" : "handle",
-    "debug" : true
+    "debug" : true,
+    "docker" : false
 }

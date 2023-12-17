@@ -1,0 +1,13 @@
+{
+    "minio-enpoint" : "192.168.178.250:9000",
+    "minio-access_key" : "minioadmin",
+    "minio-secret_key" : "minioadmin" ,
+    "input-bath-size" :  500,
+    "bucket-prefix" : "test10",
+    "mapFunction" : "mapper-do1",
+    "mapFunction-main": "megamaxl/ow-mapper:latest",
+    "reduceFunction" : "reducer-do1",
+    "reduceFunction-main" : "megamaxl/ow-reducer:latest",
+    "debug" : true,
+    "docker" : true
+}

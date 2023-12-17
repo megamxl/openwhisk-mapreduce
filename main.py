@@ -10,7 +10,7 @@ import urllib3
 urllib3.disable_warnings()
 
 
-with open('config.json') as config:
+with open('dockerConfig.json') as config:
     cofing_contnet = config.read()
 
 parsed_config = json.loads(cofing_contnet)
@@ -25,7 +25,7 @@ client = Minio(
 auth_key = "NWI3MzhiNjYtMWRhYS00ZWJhLWJlZTAtMjM3ZWEyZGU0Njk4OjdoejhVakJMR1o0Wjc3NFNFbHZlOE1LVndTVVdyMmw2bzd5aHR0akJIOFk1ODhzUU9XdHA4cDNqT0ZIdUFHQXc="
 runtime = "python:3"
 
-def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainFunction ):
+def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainFunction, docker ):
 
     # Prepare the headers
     headers = {
@@ -57,6 +57,28 @@ def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainF
         }
     }
 
+
+    if docker:
+        payload = {
+        "namespace":"_",
+        "name": functionName,
+        "exec": {
+            "kind": "blackbox",
+            "image": mainFunction
+        },       
+           "annotations": [
+            {
+               "key": "limits.maxInvocations",
+                "value": 100000
+            }
+        ],
+        "limits": {
+            "concurrency": 5,
+            "timeout" : 250000
+        }
+    }
+
+
     response = requests.put(url, headers=headers, json=payload, verify=False)
 
     # Check the response
@@ -69,7 +91,7 @@ def deploy_a_function(auth_key, runtime, zip_file_path, url, functionName, mainF
         print(f"Failed to deploy function. Status code: {response.status_code}")
         print("Error message:", response.text)
     print("Now sleeping for openwhisk")
-    time.sleep(60*5)
+    #time.sleep(60*5)
 
 
 def invoke_a_function(auth_key, url, body ):
@@ -203,7 +225,7 @@ with open("exampleData/data.csv") as fl:
             usedkeys.append(key)
             key = key +1
             #TODO ROEMOVE
-            if key == 101:
+            if key == 10:
                 break 
         lines.append(line)
 
@@ -217,7 +239,7 @@ url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{functionName}?o
 
 star_time = time.time()
 
-#deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path=zip_file_path, url=url, functionName=functionName , mainFunction=parsed_config['mapFunction-main'])
+deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path=zip_file_path, url=url, functionName=functionName , mainFunction=parsed_config['mapFunction-main'], docker=parsed_config['docker'])
 print(f"depolyed mapper {functionName}")
 
 intermidated_buket = parsed_config['bucket-prefix'] + "-intermidated"
@@ -226,10 +248,16 @@ client.make_bucket(bucket_name=intermidated_buket)
 
 url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{functionName}?blocking=true&result=true"
 
+if parsed_config['debug']:
+    print("Metadata : start mapper calcl here")
+
 HandleRequests(auth_key, invoke_a_function, reDoingRequests, handle_activationID, input_bucket, usedkeys, failed_req, activation_ids, url, intermidated_buket, 10)
 
+if parsed_config['debug']:
+    print("Metadata : sopt mapper calcl here")
+
 print("All Mapper calls completed.")   
- 
+
 paths = client.list_objects(intermidated_buket, prefix="key", recursive=True)
 
 intermediatekeys = []
@@ -239,7 +267,7 @@ reducer_function_name = parsed_config['bucket-prefix'] + "-reducer"
 url = f"https://192.168.178.220:443/api/v1/namespaces/_/actions/{parsed_config['reduceFunction']}?overwrite=false"
 
 print("Deploying Reducer function")
-#deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path="redOp/reducertest.zip", url=url, functionName=parsed_config['reduceFunction'] , mainFunction=parsed_config['reduceFunction-main'])
+deploy_a_function(auth_key=auth_key, runtime=runtime, zip_file_path="redOp/reducertest.zip", url=url, functionName=parsed_config['reduceFunction'] , mainFunction=parsed_config['reduceFunction-main'],  docker=parsed_config['docker'])
 
 output_bucket = parsed_config['bucket-prefix'] + "-output"
 
